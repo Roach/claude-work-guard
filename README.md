@@ -1,5 +1,7 @@
 # claude-work-guard
 
+<img width="640" height="320" alt="claude-work-gaurd" src="https://github.com/user-attachments/assets/44a08900-bb1b-47c8-9277-b6892c809a93" />
+
 A Claude Code hook that interrupts long, untracked coding sessions to ask:
 *"Should we file a JIRA ticket and/or cut a feature branch before going
 further?"*
