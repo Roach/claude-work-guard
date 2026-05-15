@@ -3,7 +3,7 @@
 <img width="640" height="320" alt="claude-work-gaurd" src="https://github.com/user-attachments/assets/44a08900-bb1b-47c8-9277-b6892c809a93" />
 
 A Claude Code hook that interrupts long, untracked coding sessions to ask:
-*"Should we file a JIRA ticket and/or cut a feature branch before going
+*"Should we file a Jira ticket and/or cut a feature branch before going
 further?"*
 
 It's a guard-rail against the failure mode where you ask Claude a quick
@@ -15,25 +15,25 @@ and no paper trail.
 
 ## Demo
 
-Twenty minutes into a session on `main`, with no JIRA key mentioned and
+Twenty minutes into a session on `main`, with no Jira key mentioned and
 four files modified, Claude tries another edit. The hook fires, prints
 to stderr with exit 2, and Claude Code surfaces it as a blocking note:
 
 ```
 ⚠  Work-guard check (20 min into this session):
   •  4 uncommitted files
-  •  no JIRA ticket referenced yet
+  •  no Jira ticket referenced yet
   •  on default branch `main`
 
 Pause and ask the user whether to:
-  →  create or reference a JIRA ticket
+  →  create or reference a Jira ticket
   →  cut a feature branch before further edits
 If they decline, continue and don't ask again.
 ```
 
 Claude pauses mid-task and asks the user. If the user says "go ahead,"
 the hook stays quiet for the rest of the session — `warned: true` is
-sticky. Only the bullets whose conditions tripped appear; if a JIRA key
+sticky. Only the bullets whose conditions tripped appear; if a Jira key
 shows up later or the user switches to a feature branch before the
 threshold, the hook silently bows out.
 
@@ -43,14 +43,14 @@ Two hook points, one shell script, one tiny JSON file per session.
 
 ```
 ┌──────────────────────┐                       ┌─────────────────────┐
-│ UserPromptSubmit     │── prompt mode ──▶     │ scan for JIRA key   │
+│ UserPromptSubmit     │── prompt mode ──▶     │ scan for Jira key   │
 │ (every user message) │                       │ flip jira_seen=true │
 └──────────────────────┘                       └─────────────────────┘
 
 ┌──────────────────────┐                       ┌─────────────────────┐
 │ PostToolUse          │── edit mode ──▶       │ stamp first_edit;   │
 │ Edit|Write|MultiEdit │                       │ if elapsed ≥ thresh │
-│ |NotebookEdit        │                       │ and (no JIRA OR on  │
+│ |NotebookEdit        │                       │ and (no Jira OR on  │
 └──────────────────────┘                       │ default branch),    │
                                                │ print nag, exit 2   │
                                                └─────────────────────┘
@@ -74,33 +74,33 @@ Otherwise, the nag fires on the first edit that satisfies **all** of:
    (default 15 minutes).
 2. **No prior warning** issued in this session (`warned: false`).
 3. Either:
-   - no JIRA-style key has been seen in any user prompt this session, **or**
+   - no Jira-style key has been seen in any user prompt this session, **or**
    - the repo's current branch is one of `main`, `master`, `develop`,
      `trunk`, `dev`.
 
-If neither (3) condition is met — JIRA key seen *and* on a feature branch
+If neither (3) condition is met — Jira key seen *and* on a feature branch
 — the script silently marks the session `warned: true` and exits clean,
 so it stops checking for the rest of the session.
 
 ### Message variants
 
 Each bullet drops out individually when its condition isn't met: no
-uncommitted-files line when the tree is clean, no JIRA bullet when a
+uncommitted-files line when the tree is clean, no Jira bullet when a
 key has been seen, no branch bullet when on a feature branch. When both
-JIRA and branch conditions are satisfied, the hook exits silently — no
+Jira and branch conditions are satisfied, the hook exits silently — no
 nag at all.
 
-## JIRA: detection only, no integration
+## Jira: detection only, no integration
 
-The hook does **not** talk to JIRA. It does not create tickets, validate
+The hook does **not** talk to Jira. It does not create tickets, validate
 keys, or know whether a referenced key actually exists. It only watches
 user prompts for strings matching `\b[A-Z][A-Z0-9]+-[0-9]+\b` (e.g.
 `PROJ-123`, `SEC-7746`). The presence of a matching string in any prompt
-during the session is enough to suppress the JIRA half of the nag.
+during the session is enough to suppress the Jira half of the nag.
 
 The nag itself just instructs Claude to **ask the user** whether to
 create or reference a ticket. Whatever ticket-creation tooling the user
-prefers (JIRA MCP, browser, CLI) handles the actual work.
+prefers (Jira MCP, browser, CLI) handles the actual work.
 
 ## Installation
 
@@ -155,7 +155,7 @@ prefers (JIRA MCP, browser, CLI) handles the actual work.
 | Per-repo opt-out | Create an empty `.no-work-guard` file at the repo root. |
 | Non-git directories | Always skipped automatically — scratch dirs and script folders won't trip it. |
 | Default-branch list | Edit the `case "$branch" in main\|master\|develop\|trunk\|dev) ...` line in the script. |
-| JIRA key regex | Edit the `grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'` line. |
+| Jira key regex | Edit the `grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'` line. |
 | State location | `~/.claude/work-guard/<session_id>.json`. Safe to delete at any time. |
 
 Example: nag after 10 minutes instead of 15 —
@@ -181,7 +181,7 @@ Per-session JSON, one file per `session_id`:
 - `first_edit` — Unix timestamp of the first `Edit|Write|MultiEdit|NotebookEdit`
   in this session. The clock starts here, not at session start, so a
   session that opens with Q&A doesn't burn the budget.
-- `jira_seen` — set to `true` the first time a JIRA-style key appears in
+- `jira_seen` — set to `true` the first time a Jira-style key appears in
   any user prompt.
 - `warned` — set to `true` after the nag fires (or after the script
   determines no nag is needed). Prevents repeated interruptions.
@@ -208,7 +208,7 @@ echo '{"session_id":"smoke","cwd":"'"$PWD"'"}' \
 rm ~/.claude/work-guard/smoke.json
 ```
 
-To verify JIRA detection suppresses the JIRA half of the nag:
+To verify Jira detection suppresses the Jira half of the nag:
 
 ```bash
 echo '{"session_id":"smoke2","prompt":"working on PROJ-123"}' \
@@ -229,7 +229,7 @@ cat ~/.claude/work-guard/smoke2.json   # jira_seen should be true
   would be hostile. One prompt per session, then quiet — the user
   either course-corrects or has chosen not to, and either way the hook
   gets out of the way.
-- **No JIRA validation.** Checking that `PROJ-123` actually exists would
+- **No Jira validation.** Checking that `PROJ-123` actually exists would
   require credentials, network calls, and per-org config — too much
   surface for a nudge. Pattern-match is good enough: if the user typed
   a key-shaped string, they're at least *thinking* about tickets.

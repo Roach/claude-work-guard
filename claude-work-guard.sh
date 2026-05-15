@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code work-guard hook.
 #
-# After ~15 minutes of editing in a session, if no JIRA-style ticket has
+# After ~15 minutes of editing in a session, if no Jira-style ticket has
 # been referenced or the repo is sitting on a default branch, print a
 # one-shot nag to stderr and exit 2. Claude Code surfaces exit-2 stderr
 # back to the model as a blocking note, which prompts it to pause and
@@ -67,7 +67,7 @@ json.dump(d, open(sys.argv[1], 'w'))
 PY
 }
 
-# --- prompt mode: record JIRA mentions, nothing else -----------------------
+# --- prompt mode: record Jira mentions, nothing else -----------------------
 
 if [ "$MODE" = "prompt" ]; then
   if printf '%s' "$prompt" | /usr/bin/grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'; then
@@ -109,7 +109,7 @@ case "$branch" in
 esac
 dirty_count="$(/usr/bin/git -C "$cwd" status --porcelain 2>/dev/null | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
 
-# Nothing to flag — JIRA seen and on a feature branch. Mark warned so we
+# Nothing to flag — Jira seen and on a feature branch. Mark warned so we
 # don't keep re-checking for the rest of the session, then exit clean.
 if [ "$jira_seen" = "true" ] && [ "$on_default" -eq 0 ]; then
   write_state "$first_edit" "$jira_seen" true
@@ -129,7 +129,7 @@ if [ -n "$dirty_count" ] && [ "$dirty_count" -gt 0 ]; then
   fi
 fi
 if [ "$jira_seen" != "true" ]; then
-  facts+="  •  no JIRA ticket referenced yet"$'\n'
+  facts+="  •  no Jira ticket referenced yet"$'\n'
 fi
 if [ "$on_default" -eq 1 ]; then
   facts+="  •  on default branch \`${branch}\`"$'\n'
@@ -137,7 +137,7 @@ fi
 
 asks=""
 if [ "$jira_seen" != "true" ]; then
-  asks+="  →  create or reference a JIRA ticket"$'\n'
+  asks+="  →  create or reference a Jira ticket"$'\n'
 fi
 if [ "$on_default" -eq 1 ]; then
   asks+="  →  cut a feature branch before further edits"$'\n'
