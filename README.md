@@ -16,14 +16,14 @@ four files modified, Claude tries another edit. The hook fires, prints
 to stderr with exit 2, and Claude Code surfaces it as a blocking note:
 
 ```
-Work-guard check (20 min into this session):
-  - 4 uncommitted files
-  - no JIRA ticket referenced yet
-  - on default branch `main`
+⚠  Work-guard check (20 min into this session):
+  •  4 uncommitted files
+  •  no JIRA ticket referenced yet
+  •  on default branch `main`
 
 Pause and ask the user whether to:
-  - create or reference a JIRA ticket
-  - cut a feature branch before further edits
+  →  create or reference a JIRA ticket
+  →  cut a feature branch before further edits
 If they decline, continue and don't ask again.
 ```
 
@@ -83,14 +83,14 @@ so it stops checking for the rest of the session.
 The fullest form, when both JIRA and branch conditions trip:
 
 ```
-Work-guard check (17 min into this session):
-  - 4 uncommitted files
-  - no JIRA ticket referenced yet
-  - on default branch `main`
+⚠  Work-guard check (17 min into this session):
+  •  4 uncommitted files
+  •  no JIRA ticket referenced yet
+  •  on default branch `main`
 
 Pause and ask the user whether to:
-  - create or reference a JIRA ticket
-  - cut a feature branch before further edits
+  →  create or reference a JIRA ticket
+  →  cut a feature branch before further edits
 If they decline, continue and don't ask again.
 ```
 

@@ -126,27 +126,27 @@ mins=$(( elapsed / 60 ))
 facts=""
 if [ -n "$dirty_count" ] && [ "$dirty_count" -gt 0 ]; then
   if [ "$dirty_count" -eq 1 ]; then
-    facts+="  - 1 uncommitted file"$'\n'
+    facts+="  •  1 uncommitted file"$'\n'
   else
-    facts+="  - ${dirty_count} uncommitted files"$'\n'
+    facts+="  •  ${dirty_count} uncommitted files"$'\n'
   fi
 fi
 if [ "$jira_seen" != "true" ]; then
-  facts+="  - no JIRA ticket referenced yet"$'\n'
+  facts+="  •  no JIRA ticket referenced yet"$'\n'
 fi
 if [ "$on_default" -eq 1 ]; then
-  facts+="  - on default branch \`${branch}\`"$'\n'
+  facts+="  •  on default branch \`${branch}\`"$'\n'
 fi
 
 asks=""
 if [ "$jira_seen" != "true" ]; then
-  asks+="  - create or reference a JIRA ticket"$'\n'
+  asks+="  →  create or reference a JIRA ticket"$'\n'
 fi
 if [ "$on_default" -eq 1 ]; then
-  asks+="  - cut a feature branch before further edits"$'\n'
+  asks+="  →  cut a feature branch before further edits"$'\n'
 fi
 
-msg="Work-guard check (${mins} min into this session):"$'\n'
+msg="⚠  Work-guard check (${mins} min into this session):"$'\n'
 msg+="${facts}"
 msg+=$'\n'"Pause and ask the user whether to:"$'\n'
 msg+="${asks}"
