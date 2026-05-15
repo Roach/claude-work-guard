@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Claude Code work-guard hook.
 #
-# Goal: if Claude has been actively editing for ~15 minutes in a session and
-# there is still no JIRA-style ticket referenced AND/OR the repo is sitting on
-# a default branch, nudge the model (once) to ask the user whether to file a
-# ticket or cut a branch.
+# After ~15 minutes of editing in a session, if no JIRA-style ticket has
+# been referenced or the repo is sitting on a default branch, print a
+# one-shot nag to stderr and exit 2. Claude Code surfaces exit-2 stderr
+# back to the model as a blocking note, which prompts it to pause and
+# ask the user about a ticket / feature branch.
 #
-# Wire-up (settings.json):
-#   UserPromptSubmit -> this script with arg "prompt"
-#   PostToolUse (Edit|Write|MultiEdit|NotebookEdit) -> this script with arg "edit"
+# Skip conditions (edit mode): not inside a git repo, or a
+# .no-work-guard marker file is present at the repo root.
 #
-# State lives at ~/.claude/work-guard/<session_id>.json
+# Wire-up (~/.claude/settings.json):
+#   UserPromptSubmit                      -> this script with arg "prompt"
+#   PostToolUse Edit|Write|MultiEdit|...  -> this script with arg "edit"
+#
+# State lives at ~/.claude/work-guard/<session_id>.json.
 
 set -u
 
@@ -31,82 +35,73 @@ prompt="$(read_field prompt)"
 [ -z "$session_id" ] && exit 0
 
 state_file="$STATE_DIR/${session_id}.json"
-
 now=$(date +%s)
 
-# --- helpers ---------------------------------------------------------------
+# --- state helpers ---------------------------------------------------------
 
-load_state() {
-  if [ -f "$state_file" ]; then
-    cat "$state_file"
-  else
-    printf '{"first_edit":0,"jira_seen":false,"warned":false}'
-  fi
+# Reads the state file (or defaults) and emits three lines: first_edit,
+# jira_seen, warned. State file path is passed as argv[1] so it never has
+# to be interpolated into the Python source.
+read_state() {
+  /usr/bin/python3 - "$state_file" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+d = json.load(open(p)) if os.path.exists(p) else {}
+print(d.get('first_edit', 0))
+print('true' if d.get('jira_seen') else 'false')
+print('true' if d.get('warned') else 'false')
+PY
 }
 
-save_state() {
-  printf '%s' "$1" > "$state_file"
+# Writes the three state fields. Values come in via env vars, not source
+# interpolation, so callers can pass anything safely.
+write_state() {
+  FE="$1" JS="$2" W="$3" /usr/bin/python3 - "$state_file" <<'PY'
+import json, os, sys
+d = {
+    'first_edit': int(os.environ['FE']),
+    'jira_seen':  os.environ['JS'] == 'true',
+    'warned':     os.environ['W']  == 'true',
+}
+json.dump(d, open(sys.argv[1], 'w'))
+PY
 }
 
-jq_set() {
-  # $1 state json, $2 key, $3 value (raw JSON literal)
-  printf '%s' "$1" | /usr/bin/python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-d['$2']=json.loads('''$3''')
-print(json.dumps(d))
-"
-}
-
-jq_get() {
-  printf '%s' "$1" | /usr/bin/python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-v=d.get('$2','')
-print(v if not isinstance(v,bool) else ('true' if v else 'false'))
-"
-}
-
-state="$(load_state)"
-
-# --- prompt mode: just record whether a JIRA key has appeared ---------------
+# --- prompt mode: record JIRA mentions, nothing else -----------------------
 
 if [ "$MODE" = "prompt" ]; then
   if printf '%s' "$prompt" | /usr/bin/grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'; then
-    state="$(jq_set "$state" jira_seen true)"
-    save_state "$state"
+    { read -r first_edit; read -r _jira_seen; read -r warned; } < <(read_state)
+    write_state "$first_edit" true "$warned"
   fi
   exit 0
 fi
 
-# --- edit mode: timestamp, then maybe warn ---------------------------------
+# --- edit mode: skip-checks, then maybe warn -------------------------------
 
-# Skip outside a git repo — the guard's whole frame (branch, ticket) is
-# git-shaped. Also skip if the repo has opted out with a .no-work-guard
-# marker file.
+# Skip outside a git repo — the guard's frame (branch, ticket) is git-shaped.
 if [ -z "$cwd" ] || { [ ! -d "$cwd/.git" ] && [ ! -f "$cwd/.git" ]; }; then
   exit 0
 fi
+# Per-repo opt-out.
 if [ -e "$cwd/.no-work-guard" ]; then
   exit 0
 fi
 
-first_edit="$(jq_get "$state" first_edit)"
-if [ "$first_edit" = "0" ] || [ -z "$first_edit" ]; then
-  state="$(jq_set "$state" first_edit "$now")"
-  save_state "$state"
+{ read -r first_edit; read -r jira_seen; read -r warned; } < <(read_state)
+
+# First edit of the session: stamp the clock and exit clean.
+if [ "$first_edit" -eq 0 ]; then
+  write_state "$now" "$jira_seen" "$warned"
   exit 0
 fi
 
-warned="$(jq_get "$state" warned)"
+# Already warned, or threshold not yet crossed.
 [ "$warned" = "true" ] && exit 0
-
 elapsed=$(( now - first_edit ))
 [ "$elapsed" -lt "$THRESHOLD_SEC" ] && exit 0
 
 # Threshold crossed — gather facts.
-jira_seen="$(jq_get "$state" jira_seen)"
-
 branch="$(/usr/bin/git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 on_default=0
 case "$branch" in
@@ -114,12 +109,14 @@ case "$branch" in
 esac
 dirty_count="$(/usr/bin/git -C "$cwd" status --porcelain 2>/dev/null | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
 
-# If nothing to flag, mark warned (don't keep re-checking) and exit clean.
+# Nothing to flag — JIRA seen and on a feature branch. Mark warned so we
+# don't keep re-checking for the rest of the session, then exit clean.
 if [ "$jira_seen" = "true" ] && [ "$on_default" -eq 0 ]; then
-  state="$(jq_set "$state" warned true)"
-  save_state "$state"
+  write_state "$first_edit" "$jira_seen" true
   exit 0
 fi
+
+# --- compose the nag -------------------------------------------------------
 
 mins=$(( elapsed / 60 ))
 
@@ -152,9 +149,8 @@ msg+=$'\n'"Pause and ask the user whether to:"$'\n'
 msg+="${asks}"
 msg+="If they decline, continue and don't ask again."
 
-state="$(jq_set "$state" warned true)"
-save_state "$state"
+write_state "$first_edit" "$jira_seen" true
 
-# PostToolUse + exit 2: stderr is surfaced back to Claude as a blocking note.
+# PostToolUse + exit 2: stderr is forwarded to Claude as a blocking note.
 printf '%s\n' "$msg" 1>&2
 exit 2

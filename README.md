@@ -78,27 +78,13 @@ If neither (3) condition is met — JIRA key seen *and* on a feature branch
 — the script silently marks the session `warned: true` and exits clean,
 so it stops checking for the rest of the session.
 
-### What the nag looks like
+### Message variants
 
-The fullest form, when both JIRA and branch conditions trip:
-
-```
-⚠  Work-guard check (17 min into this session):
-  •  4 uncommitted files
-  •  no JIRA ticket referenced yet
-  •  on default branch `main`
-
-Pause and ask the user whether to:
-  →  create or reference a JIRA ticket
-  →  cut a feature branch before further edits
-If they decline, continue and don't ask again.
-```
-
-The fact and ask bullets each drop out when their condition isn't met:
-no uncommitted-files line when the tree is clean, no JIRA bullet when a
-key has been seen this session, no branch bullet when on a feature
-branch. If both JIRA and branch conditions are satisfied, the hook
-exits silently — no nag.
+Each bullet drops out individually when its condition isn't met: no
+uncommitted-files line when the tree is clean, no JIRA bullet when a
+key has been seen, no branch bullet when on a feature branch. When both
+JIRA and branch conditions are satisfied, the hook exits silently — no
+nag at all.
 
 ## JIRA: detection only, no integration
 
@@ -111,13 +97,6 @@ during the session is enough to suppress the JIRA half of the nag.
 The nag itself just instructs Claude to **ask the user** whether to
 create or reference a ticket. Whatever ticket-creation tooling the user
 prefers (JIRA MCP, browser, CLI) handles the actual work.
-
-## Why hooks, not an MCP server
-
-The value here is *deterministic interruption*. A `PostToolUse` exit-2
-hook fires automatically on every edit and forces a note into the
-model's context. An MCP tool would only fire when the model chose to
-call it — which is exactly the loop this guard exists to break.
 
 ## Installation
 
@@ -170,12 +149,10 @@ call it — which is exactly the loop this guard exists to break.
 |---|---|
 | Trigger threshold | `CLAUDE_WORK_GUARD_THRESHOLD` env var, in seconds. Default `900` (15 min). |
 | Per-repo opt-out | Create an empty `.no-work-guard` file at the repo root. |
+| Non-git directories | Always skipped automatically — scratch dirs and script folders won't trip it. |
 | Default-branch list | Edit the `case "$branch" in main\|master\|develop\|trunk\|dev) ...` line in the script. |
 | JIRA key regex | Edit the `grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'` line. |
 | State location | `~/.claude/work-guard/<session_id>.json`. Safe to delete at any time. |
-
-The hook is a no-op outside git repos, so scratch directories and
-one-off script folders won't trip it.
 
 Example: nag after 10 minutes instead of 15 —
 
@@ -256,7 +233,6 @@ cat ~/.claude/work-guard/smoke2.json   # jira_seen should be true
 ## Files
 
 - `claude-work-guard.sh` — the hook, invoked as either `prompt` or `edit`.
-- `CLAUDE.md` — project instructions for Claude Code itself.
 - `README.md` — this file.
 
 ## License
