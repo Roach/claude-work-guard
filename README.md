@@ -9,6 +9,8 @@ question, that quick question turns into half an hour of edits on `main`,
 and now there's a pile of uncommitted changes with no ticket, no branch,
 and no paper trail.
 
+**Site:** <https://roach.github.io/claude-work-guard/>
+
 ## Demo
 
 Twenty minutes into a session on `main`, with no JIRA key mentioned and

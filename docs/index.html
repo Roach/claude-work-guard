@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>claude-work-guard(1) · man page</title>
+  <meta name="description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask for a JIRA ticket or feature branch.">
+  <meta name="author" content="Roach">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b0c0e">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="claude-work-guard">
+  <meta property="og:title" content="claude-work-guard(1) — single-shot session nag">
+  <meta property="og:description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask about a JIRA ticket or feature branch.">
+  <meta property="og:url" content="https://roach.github.io/claude-work-guard/">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="claude-work-guard(1)">
+  <meta name="twitter:description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask about a JIRA ticket or feature branch.">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://roach.github.io/claude-work-guard/">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:        #0b0c0e;
+      --bg-2:      #111317;
+      --bg-3:      #181b20;
+      --statusbar: #1c1f25;
+      --text:      #d6d9df;
+      --text-dim:  #7a818c;
+      --text-mute: #555b65;
+      --text-faint:#3a3f47;
+      --border:    #20242b;
+      --border-2:  #2a2f37;
+      --amber:     #f5a623;
+      --amber-2:   #ffc56b;
+      --amber-dim: #6b4a0e;
+      --green:     #9ec888;
+      --cyan:      #7fb8c9;
+      --magenta:   #c89bc4;
+      --red:       #e07a6f;
+
+      --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      background: var(--bg);
+      color-scheme: dark;
+      font-size: 16.5px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      font-feature-settings: 'liga' 1, 'calt' 1, 'zero' 1, 'ss02' 1;
+      line-height: 1.65;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Faint scanline / column rule backdrop */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse 50% 35% at 20% 0%, rgba(245, 166, 35, 0.045), transparent 70%),
+        linear-gradient(to bottom, transparent 0px, transparent 2px, rgba(255,255,255,0.008) 3px, transparent 3px);
+      background-size: 100% 100%, 100% 3px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ============ PAGE ============ */
+    .page {
+      position: relative;
+      z-index: 1;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 1.75rem 2rem 5rem;
+    }
+
+    /* ============ HERO ============ */
+    .hero {
+      padding: 0.5rem 0 2.5rem;
+      margin-bottom: 2.5rem;
+      border-bottom: 1px dashed var(--border-2);
+      position: relative;
+    }
+    .hero-title {
+      font-size: clamp(2.6rem, 7vw, 5.25rem);
+      font-weight: 700;
+      letter-spacing: -0.045em;
+      line-height: 0.96;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35em;
+      flex-wrap: wrap;
+    }
+    .hero-title .accent { color: var(--amber); }
+    .hero-title .sep { color: var(--text-mute); font-weight: 400; }
+    .hero-title-ico {
+      width: 0.78em;
+      height: 0.78em;
+      color: var(--amber);
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 14px rgba(245, 166, 35, 0.35));
+    }
+    .hero-title-ico .hand-group {
+      transform-origin: 12px 14px;
+      animation: sweep 4s linear infinite;
+    }
+    @keyframes sweep {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* Section head leading chevron */
+    .sec-head-ico {
+      width: 0.85em;
+      height: 0.85em;
+      color: var(--amber);
+      flex-shrink: 0;
+      opacity: 0.9;
+    }
+
+    /* Flow node leading icon */
+    .flow-node .name-line {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .flow-node-ico {
+      width: 1.1em;
+      height: 1.1em;
+      color: var(--amber);
+      flex-shrink: 0;
+      stroke-width: 1.7;
+    }
+
+    /* ============ HERO DEMO (Claude Code session simulation) ============ */
+    .hero-demo {
+      margin: 2.5rem 0 2.5rem;
+    }
+    .demo-window {
+      background: var(--bg-2);
+      border: 1px solid var(--border-2);
+      border-radius: 5px;
+      overflow: hidden;
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.02) inset,
+        0 40px 80px -40px rgba(0,0,0,0.7),
+        0 0 60px -30px rgba(245, 166, 35, 0.15);
+    }
+    .demo-titlebar {
+      background: var(--bg-3);
+      padding: 0.55rem 0.95rem;
+      border-bottom: 1px solid var(--border-2);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.74rem;
+      color: var(--text-mute);
+    }
+    .demo-titlebar .demo-dots { display: inline-flex; gap: 0.35rem; }
+    .demo-titlebar .demo-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(158, 200, 136, 0.5);
+    }
+    .demo-titlebar-text {
+      color: var(--text-dim);
+      flex: 1;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .demo-titlebar-meta {
+      color: var(--amber);
+      font-size: 0.66rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .demo-body {
+      padding: 1.2rem 1.4rem 1.4rem;
+      font-size: 0.88rem;
+      line-height: 1.9;
+    }
+    .demo-line { display: flex; align-items: baseline; gap: 0.5em; flex-wrap: wrap; }
+    .demo-line .demo-prompt { color: var(--amber); font-weight: 600; }
+    .demo-line .demo-cmd { color: var(--text); }
+    .demo-line.demo-user {
+      color: var(--text);
+      margin-bottom: 0.4rem;
+    }
+    .demo-line.demo-user .demo-user-prompt { color: var(--amber); font-weight: 600; margin-right: 0.45em; }
+    .demo-line.demo-tool { color: var(--text-dim); }
+    .demo-line.demo-tool .demo-bullet {
+      color: var(--green);
+      font-size: 0.65em;
+      vertical-align: 0.25em;
+      margin-right: 0.1em;
+    }
+    .demo-line.demo-tool .demo-paren { color: var(--text-faint); }
+    .demo-line.demo-tool .demo-file { color: var(--cyan); }
+
+    /* Stagger reveal — user prompt first, then progress row, then edits */
+    .d0, .d-progress, .d1, .d2, .d3, .d4 {
+      opacity: 0;
+      animation: line-in 0.4s ease-out both;
+    }
+    .d0         { animation-delay: 0.25s; }
+    .d-progress { animation-delay: 0.6s;  }
+    .d1         { animation-delay: 1.1s;  }
+    .d2         { animation-delay: 1.9s;  }
+    .d3         { animation-delay: 2.7s;  }
+    .d4         { animation-delay: 3.5s;  }
+    @keyframes line-in {
+      from { opacity: 0; transform: translateX(-6px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Progress bar */
+    .demo-progress-row {
+      margin-top: 0.75rem;
+      padding-top: 0.85rem;
+      border-top: 1px dotted var(--border-2);
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+    }
+    .demo-label {
+      color: var(--text-mute);
+      font-size: 0.74rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      white-space: nowrap;
+    }
+    .demo-timer-ico {
+      width: 0.95em;
+      height: 0.95em;
+      color: var(--amber);
+    }
+    .progress-bar {
+      position: relative;
+      display: inline-block;
+      flex: 1;
+      min-width: 180px;
+      max-width: 100%;
+      letter-spacing: -0.08em;
+      font-size: 1rem;
+      line-height: 1;
+      color: var(--text-faint);
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .progress-bar .progress-empty,
+    .progress-bar .progress-filled {
+      display: inline-block;
+      white-space: nowrap;
+    }
+    .progress-bar .progress-filled {
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--amber);
+      clip-path: inset(0 100% 0 0);
+      animation: progress-fill 4s linear 0.7s forwards;
+      filter: drop-shadow(0 0 6px rgba(245, 166, 35, 0.35));
+    }
+    @keyframes progress-fill {
+      to { clip-path: inset(0 0 0 0); }
+    }
+    .progress-counter {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.92rem;
+      white-space: nowrap;
+    }
+    .progress-of {
+      color: var(--text-mute);
+      font-size: 0.82rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    /* Claude pauses to ask the user — rendered as in-conversation text, not as a stderr block */
+    .demo-claude-pause {
+      margin-top: 1.4rem;
+      opacity: 0;
+      transform: translateY(6px);
+      animation: claude-in 0.6s cubic-bezier(0.16, 0.7, 0.24, 1) 4.8s forwards;
+    }
+    @keyframes claude-in {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .claude-divider {
+      height: 1px;
+      border-top: 1px dashed var(--border-2);
+      margin-bottom: 1rem;
+    }
+    .claude-msg {
+      color: var(--text);
+      margin-bottom: 0.6rem;
+      font-size: 0.92rem;
+      line-height: 1.65;
+      max-width: 60ch;
+    }
+    .claude-msg strong { color: var(--amber-2); font-weight: 500; }
+    .claude-msg code {
+      color: var(--green);
+      background: rgba(158, 200, 136, 0.08);
+      border: 1px solid var(--border-2);
+      padding: 0.05em 0.35em;
+      border-radius: 2px;
+      font-size: 0.9em;
+    }
+    .claude-options {
+      list-style: none;
+      counter-reset: opt;
+      margin: 0.55rem 0 0.85rem 0.85em;
+    }
+    .claude-options li {
+      counter-increment: opt;
+      padding: 0.1rem 0 0.1rem 1.85rem;
+      position: relative;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      line-height: 1.65;
+    }
+    .claude-options li::before {
+      content: counter(opt, decimal-leading-zero) ".";
+      position: absolute;
+      left: 0;
+      color: var(--amber);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .demo-user-row {
+      margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .user-cursor {
+      display: inline-block;
+      width: 0.5em;
+      height: 1.05em;
+      background: var(--text);
+      vertical-align: -0.15em;
+      animation: blink 1.05s steps(2) infinite;
+    }
+
+    .hero-tagline {
+      font-size: 1.18rem;
+      line-height: 1.55;
+      color: var(--text-dim);
+      max-width: 64ch;
+      margin-bottom: 1.75rem;
+    }
+    .hero-tagline em {
+      color: var(--text);
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 2rem;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+    .hero-meta .item { display: flex; gap: 0.55rem; align-items: center; }
+    .hero-meta .item .key {
+      color: var(--text-mute);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      align-self: center;
+    }
+    .hero-meta .item .val { color: var(--text); }
+    .hero-meta .item .val.with-ico { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+    /* ============ ICONS (simple icons, amber-tinted via URL color param) ============ */
+    .ico {
+      width: 1em;
+      height: 1em;
+      vertical-align: -0.14em;
+      display: inline-block;
+      opacity: 0.92;
+      flex-shrink: 0;
+    }
+    .ico.dim { opacity: 0.65; }
+
+    /* ============ COMMAND HEADER ============ */
+    .cmdline {
+      display: flex;
+      align-items: baseline;
+      gap: 0.65rem;
+      font-size: 1rem;
+      color: var(--text-dim);
+      margin-bottom: 3rem;
+    }
+    .cmdline .prompt {
+      color: var(--amber);
+      font-weight: 600;
+    }
+    .cmdline .cmd { color: var(--text); }
+    .cmdline .cursor {
+      display: inline-block;
+      width: 0.6em;
+      height: 1em;
+      background: var(--amber);
+      vertical-align: -0.15em;
+      margin-left: 0.15em;
+      animation: blink 1.05s steps(2) infinite;
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* ============ MAN HEADER ============ */
+    .man-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.82rem;
+      color: var(--text-mute);
+      letter-spacing: 0.08em;
+      padding-bottom: 1rem;
+      margin-bottom: 2.25rem;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+    }
+    .man-head .title-mid {
+      color: var(--text);
+      font-weight: 600;
+      letter-spacing: 0.1em;
+    }
+
+    /* ============ MAN SECTIONS ============ */
+    section.man {
+      margin-bottom: 3rem;
+    }
+    .sec-head {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: var(--amber);
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .sec-head::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, var(--border-2), transparent);
+    }
+    .sec-body {
+      padding-left: 2.5rem;
+      max-width: 80ch;
+    }
+    .sec-body p {
+      margin-bottom: 1rem;
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+    .sec-body p.dim { color: var(--text-dim); }
+    .sec-body strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .sec-body em {
+      color: var(--amber);
+      font-style: normal;
+      font-weight: 500;
+    }
+    .sec-body .name {
+      color: var(--amber);
+      font-weight: 600;
+    }
+
+    /* Inline code */
+    code, .code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      color: var(--cyan);
+      background: rgba(127, 184, 201, 0.06);
+      padding: 0.05em 0.35em;
+      border-radius: 2px;
+    }
+    code.amber { color: var(--amber); background: rgba(245, 166, 35, 0.08); }
+    code.green { color: var(--green); background: rgba(158, 200, 136, 0.06); }
+    code.magenta { color: var(--magenta); background: rgba(200, 155, 196, 0.06); }
+
+    /* ============ NAG BLOCK ============ */
+    .nag-wrap {
+      margin: 1.5rem 0 1.5rem;
+    }
+    .nag-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.7rem;
+      color: var(--text-mute);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .nag-header .tag {
+      color: var(--amber);
+      font-weight: 600;
+    }
+    .nag-header .line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .nag {
+      background:
+        linear-gradient(180deg, rgba(245,166,35,0.025), transparent 50%),
+        var(--bg-2);
+      border: 1px solid var(--border-2);
+      border-left: 3px solid var(--amber);
+      padding: 1.65rem 1.85rem;
+      font-family: var(--mono);
+      font-size: 0.96rem;
+      line-height: 1.78;
+      color: var(--text);
+      overflow-x: auto;
+      white-space: pre;
+      tab-size: 2;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.02),
+        0 0 40px -20px rgba(245, 166, 35, 0.18);
+    }
+    .nag .warn   { color: var(--amber-2); }
+    .nag .arrow  { color: var(--amber); }
+    .nag .dot    { color: var(--text-mute); }
+    .nag .branch { color: var(--green); }
+    .nag .num    { color: var(--amber-2); font-weight: 500; }
+    .nag .label  { color: var(--text-dim); }
+
+    /* ============ FLOW (the two hook points) ============ */
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+    .flow-node {
+      background: var(--bg-2);
+      border: 1px solid var(--border-2);
+      border-left: 2px solid var(--amber-dim);
+      padding: 1.1rem 1.3rem;
+      transition: border-left-color 0.15s, transform 0.15s;
+    }
+    .flow-node:hover {
+      border-left-color: var(--amber);
+    }
+    .flow-node .tag {
+      font-size: 0.66rem;
+      color: var(--text-mute);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .flow-node .name-line {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--amber);
+      margin-bottom: 0.5rem;
+    }
+    .flow-node .desc {
+      font-size: 0.95rem;
+      color: var(--text-dim);
+      line-height: 1.65;
+    }
+
+    /* ============ TRIGGER LIST ============ */
+    .triggers {
+      list-style: none;
+      margin: 1.25rem 0 0;
+      counter-reset: trig;
+    }
+    .triggers li {
+      counter-increment: trig;
+      padding: 0.95rem 0 0.95rem 3.5rem;
+      border-top: 1px dotted var(--border-2);
+      position: relative;
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+    .triggers li:last-child { border-bottom: 1px dotted var(--border-2); }
+    .triggers li::before {
+      content: '[' counter(trig, decimal-leading-zero) ']';
+      position: absolute;
+      left: 0;
+      top: 0.95rem;
+      color: var(--amber);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    /* ============ CODE BLOCKS ============ */
+    .codefile {
+      margin: 1.25rem 0;
+      border: 1px solid var(--border-2);
+      background: var(--bg-2);
+    }
+    .codefile-head {
+      background: var(--bg-3);
+      border-bottom: 1px solid var(--border-2);
+      padding: 0.5rem 0.95rem;
+      font-size: 0.72rem;
+      color: var(--text-mute);
+      letter-spacing: 0.06em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .codefile-head .file {
+      color: var(--text-dim);
+    }
+    .codefile-head .file .marker {
+      color: var(--amber);
+      margin-right: 0.4rem;
+    }
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border-2);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.6rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .copy-btn:hover {
+      color: var(--amber);
+      border-color: var(--amber-dim);
+    }
+    .copy-btn.copied {
+      color: var(--amber-2);
+      border-color: var(--amber);
+    }
+    .codefile pre {
+      padding: 1.25rem 1.5rem;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      line-height: 1.7;
+      color: var(--text);
+      tab-size: 2;
+    }
+    .codefile pre .k  { color: var(--magenta); }
+    .codefile pre .s  { color: var(--green); }
+    .codefile pre .p  { color: var(--text-mute); }
+    .codefile pre .c  { color: var(--text-faint); }
+
+    /* ============ CONFIG TABLE ============ */
+    .config {
+      margin: 1.25rem 0 0;
+      border-top: 1px solid var(--border);
+    }
+    .config-row {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 2rem;
+      padding: 1.1rem 0;
+      border-bottom: 1px solid var(--border);
+      align-items: baseline;
+    }
+    .config-row dt {
+      color: var(--amber);
+      font-size: 0.92rem;
+      font-weight: 500;
+      word-break: break-all;
+    }
+    .config-row dd {
+      color: var(--text);
+      font-size: 0.98rem;
+      line-height: 1.65;
+    }
+
+    /* ============ LINKS ============ */
+    a {
+      color: var(--amber);
+      text-decoration: none;
+      border-bottom: 1px solid var(--amber-dim);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    a:hover { border-bottom-color: var(--amber); }
+    .sec-body a, .triggers a, dd a {
+      color: var(--text);
+      border-bottom: 1px solid var(--text-faint);
+    }
+    .sec-body a:hover, .triggers a:hover, dd a:hover {
+      color: var(--amber);
+      border-bottom-color: var(--amber);
+    }
+
+    /* ============ FOOTER ============ */
+    .pagefoot {
+      margin-top: 4rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.74rem;
+      color: var(--text-mute);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .pagefoot .end {
+      color: var(--text-faint);
+    }
+    .pagefoot a {
+      color: var(--text-dim);
+      border-bottom: 1px solid transparent;
+    }
+    .pagefoot a:hover {
+      color: var(--amber);
+      border-bottom-color: var(--amber-dim);
+    }
+
+    /* ============ ANIMATION ============ */
+    .reveal {
+      opacity: 0;
+      animation: reveal 0.75s cubic-bezier(0.16, 0.7, 0.24, 1) forwards;
+    }
+    .r1 { animation-delay: 0.05s; }
+    .r2 { animation-delay: 0.18s; }
+    .r3 { animation-delay: 0.32s; }
+    .r4 { animation-delay: 0.46s; }
+    @keyframes reveal {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { animation: none; opacity: 1; transform: none; }
+      .cursor,
+      .user-cursor,
+      .hero-title-ico .hand-group,
+      .d0, .d-progress, .d1, .d2, .d3, .d4,
+      .progress-bar .progress-filled,
+      .demo-claude-pause { animation: none; }
+      .d0, .d-progress, .d1, .d2, .d3, .d4 { opacity: 1; transform: none; }
+      .progress-bar .progress-filled { clip-path: inset(0 0 0 0); }
+      .demo-claude-pause { opacity: 1; transform: none; }
+    }
+
+    /* ============ MOBILE ============ */
+    @media (max-width: 760px) {
+      html { font-size: 15px; }
+      .page { padding: 1rem 1.1rem 4rem; }
+      .hero { padding: 0.25rem 0 1.75rem; margin-bottom: 1.75rem; }
+      .hero-title { font-size: clamp(2.1rem, 11vw, 3.2rem); }
+      .hero-tagline { font-size: 1.05rem; }
+      .hero-meta { gap: 0.5rem 1.5rem; font-size: 0.8rem; }
+      .hero-demo { margin: 2rem 0; }
+      .demo-titlebar { padding: 0.5rem 0.7rem; font-size: 0.66rem; gap: 0.55rem; }
+      .demo-body { padding: 0.95rem 1rem 1.1rem; font-size: 0.78rem; line-height: 1.85; }
+      .demo-line .demo-file { word-break: break-all; }
+      .demo-progress-row { gap: 0.5rem; }
+      .demo-label { font-size: 0.66rem; letter-spacing: 0.08em; }
+      .progress-bar { font-size: 0.88rem; min-width: 0; flex: 1 1 100%; }
+      .progress-counter { font-size: 0.82rem; }
+      .claude-msg { font-size: 0.84rem; }
+      .claude-options li { font-size: 0.82rem; padding-left: 1.6rem; }
+      .cmdline { margin-bottom: 2rem; flex-wrap: wrap; font-size: 0.92rem; }
+      .man-head { font-size: 0.7rem; }
+      .sec-body { padding-left: 1rem; }
+      .flow { grid-template-columns: 1fr; }
+      .config-row { grid-template-columns: 1fr; gap: 0.4rem; padding: 1rem 0; }
+      .nag { padding: 1.15rem 0.95rem; font-size: 0.82rem; }
+      .triggers li { padding-left: 2.75rem; }
+      .codefile pre { font-size: 0.78rem; padding: 1rem 1.1rem; }
+    }
+
+    /* ============ MISC ============ */
+    ::selection { background: var(--amber); color: var(--bg); }
+    :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+    pre::-webkit-scrollbar { height: 6px; }
+    pre::-webkit-scrollbar-track { background: transparent; }
+    pre::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+    pre::-webkit-scrollbar-thumb:hover { background: var(--text-mute); }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+
+    <!-- ===== HERO ===== -->
+    <section class="hero reveal r1">
+      <h1 class="hero-title">
+        <svg class="hero-title-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="10" y1="2" x2="14" y2="2"/>
+          <circle cx="12" cy="14" r="8"/>
+          <g class="hand-group">
+            <line x1="12" y1="14" x2="12" y2="8.5"/>
+          </g>
+        </svg>
+        <span>claude<span class="sep">-</span><span class="accent">work-guard</span></span>
+      </h1>
+
+      <p class="hero-tagline">
+        Interrupts long, untracked Claude Code sessions to ask whether to file a JIRA ticket or cut a feature branch.
+        <br/><br/><em>One nag per session, then quiet.</em>
+      </p>
+
+      <!-- ===== ANIMATED SESSION DEMO ===== -->
+      <div class="hero-demo">
+        <div class="demo-window">
+          <div class="demo-titlebar">
+            <span class="demo-dots">
+              <span class="demo-dot ok"></span>
+            </span>
+            <span class="demo-titlebar-text">claude · ~/auth-refactor · main</span>
+            <span class="demo-titlebar-meta">session active</span>
+          </div>
+          <div class="demo-body">
+            <div class="demo-line"><span class="demo-prompt">$</span><span class="demo-cmd">claude</span></div>
+            <div class="demo-line demo-user d0"><span class="demo-user-prompt">&gt;</span> refactor the auth flow</div>
+
+            <div class="demo-progress-row d-progress">
+              <span class="demo-label">
+                <svg class="demo-timer-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="10" y1="2" x2="14" y2="2"/>
+                  <circle cx="12" cy="14" r="8"/>
+                  <line x1="12" y1="14" x2="12" y2="9"/>
+                </svg>
+                elapsed
+              </span>
+              <span class="progress-bar">
+                <span class="progress-empty">▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱</span>
+                <span class="progress-filled">▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰</span>
+              </span>
+              <span class="progress-counter">00:00</span>
+              <span class="progress-of">/ 15:00</span>
+            </div>
+
+            <div class="demo-line demo-tool d1"><span class="demo-bullet">●</span> Edit<span class="demo-paren">(</span><span class="demo-file">src/auth/login.ts</span><span class="demo-paren">)</span></div>
+            <div class="demo-line demo-tool d2"><span class="demo-bullet">●</span> Edit<span class="demo-paren">(</span><span class="demo-file">src/auth/session.ts</span><span class="demo-paren">)</span></div>
+            <div class="demo-line demo-tool d3"><span class="demo-bullet">●</span> Write<span class="demo-paren">(</span><span class="demo-file">src/middleware/guard.ts</span><span class="demo-paren">)</span></div>
+            <div class="demo-line demo-tool d4"><span class="demo-bullet">●</span> Edit<span class="demo-paren">(</span><span class="demo-file">src/types.ts</span><span class="demo-paren">)</span></div>
+
+            <!-- Claude pauses and asks the user — what the user actually sees -->
+            <div class="demo-claude-pause">
+              <div class="claude-divider"></div>
+              <div class="claude-msg">
+                Hold on — we're <strong>15&nbsp;minutes</strong> into this session on <code>main</code> with <strong>4 uncommitted files</strong> and no JIRA ticket referenced yet. Want me to:
+              </div>
+              <ul class="claude-options">
+                <li>file a JIRA ticket for this work</li>
+                <li>cut a feature branch before further edits</li>
+              </ul>
+              <div class="claude-msg">Or should we push through and sort it after?</div>
+              <div class="demo-user-row">
+                <span class="demo-user-prompt">&gt;</span><span class="user-cursor"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-meta">
+        <span class="item"><span class="key">kind</span><span class="val">hook</span></span>
+        <span class="item"><span class="key">lang</span><span class="val with-ico">
+          <img class="ico" src="https://cdn.simpleicons.org/gnubash/F5A623" alt="" aria-hidden="true">bash
+          <span style="color:var(--text-mute);margin:0 0.2rem">+</span>
+          <img class="ico" src="https://cdn.simpleicons.org/python/F5A623" alt="" aria-hidden="true">python
+        </span></span>
+        <span class="item"><span class="key">deps</span><span class="val">none</span></span>
+      </div>
+    </section>
+
+    <!-- ===== DESCRIPTION ===== -->
+    <section class="man reveal r2">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>DESCRIPTION</div>
+      <div class="sec-body">
+        <p>Two hooks, one shell script, one small JSON file per session. No network, no daemon, no dependencies beyond <code>bash</code> and the system <code>python3</code>.</p>
+        <p class="dim">The clock starts on the first actual edit, not on session start &mdash; opening Claude for exploratory Q&amp;A won't burn the threshold. The interrupt fires at most once per session; once you've answered (or declined), the hook stays quiet for the rest of it.</p>
+      </div>
+    </section>
+
+    <!-- ===== THE INTERRUPTION ===== -->
+    <section class="man reveal r3">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>THE INTERRUPTION</div>
+      <div class="sec-body">
+        <p>The conversational pause shown above is Claude's user-facing translation of what the hook actually emits. The hook itself just prints this to <code>stderr</code> with <em>exit 2</em>; Claude Code forwards exit-2 stderr to the model as a blocking note, which is what causes Claude to pause and ask.</p>
+
+        <div class="nag-wrap">
+          <div class="nag-header">
+            <span class="tag">[ stderr · exit 2 ]</span>
+            <span class="line"></span>
+          </div>
+<pre class="nag"><span class="warn">⚠</span>  Work-guard check (<span class="num">20</span> min into this session):
+  <span class="dot">•</span>  <span class="num">4</span> uncommitted files
+  <span class="dot">•</span>  no JIRA ticket referenced yet
+  <span class="dot">•</span>  on default branch <span class="branch">`main`</span>
+
+Pause and ask the user whether to:
+  <span class="arrow">→</span>  create or reference a JIRA ticket
+  <span class="arrow">→</span>  cut a feature branch before further edits
+If they decline, continue and don't ask again.</pre>
+        </div>
+
+        <p class="dim">Each bullet drops out individually when its condition isn't met. If both JIRA and branch conditions are already satisfied, the hook exits silently &mdash; no nag at all.</p>
+      </div>
+    </section>
+
+    <!-- ===== HOW IT WORKS ===== -->
+    <section class="man reveal r4">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>HOW IT WORKS</div>
+      <div class="sec-body">
+        <p>Wire two Claude Code hook points to the same shell script. The first watches user prompts; the second watches edits. Per-session state lives in a small JSON file under <code>~/.claude/work-guard/</code>.</p>
+
+        <div class="flow">
+          <div class="flow-node">
+            <div class="tag">[ trigger · prompt mode ]</div>
+            <div class="name-line">
+              <svg class="flow-node-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              UserPromptSubmit
+            </div>
+            <div class="desc">Every user message. Scans for a JIRA-style key (<code>PROJ-123</code>) and sets <code>jira_seen</code>.</div>
+          </div>
+          <div class="flow-node">
+            <div class="tag">[ trigger · edit mode ]</div>
+            <div class="name-line">
+              <svg class="flow-node-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>
+                <path d="m15 5 4 4"/>
+              </svg>
+              PostToolUse
+            </div>
+            <div class="desc">Every <code>Edit</code> / <code>Write</code> / <code>MultiEdit</code> / <code>NotebookEdit</code>. Stamps first-edit time and checks the threshold.</div>
+          </div>
+        </div>
+
+        <p>On the first edit past the threshold, the script gathers facts &mdash; branch, dirty-file count, JIRA-seen flag &mdash; and decides whether to interrupt. <a href="#the-interruption">See above</a> for what the interrupt itself looks like.</p>
+      </div>
+    </section>
+
+    <!-- ===== TRIGGER CONDITIONS ===== -->
+    <section class="man reveal r4">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>TRIGGER CONDITIONS</div>
+      <div class="sec-body">
+        <p class="dim">The hook exits early &mdash; no state, no nag &mdash; when <code>cwd</code> isn't inside a git repo, or when the repo contains a <code>.no-work-guard</code> marker file at its root.</p>
+        <p>Otherwise the nag fires on the first edit that satisfies <em>all</em> of:</p>
+        <ol class="triggers">
+          <li><strong>Elapsed time</strong> since the first edit in this session ≥ threshold (default 15 minutes).</li>
+          <li><strong>No prior warning</strong> issued in this session.</li>
+          <li><strong>Either</strong> no JIRA-style key has been seen in any user prompt this session, <strong>or</strong> the repo's current branch is one of <code>main</code>, <code>master</code>, <code>develop</code>, <code>trunk</code>, <code>dev</code>.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===== INSTALLATION ===== -->
+    <section class="man reveal r4">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>INSTALLATION</div>
+      <div class="sec-body">
+        <p>Clone the repo, make the script executable, and add the two entries below to <code>~/.claude/settings.json</code>. Use absolute paths &mdash; hooks don't get your shell's <code>PATH</code> expansion. Restart any active Claude Code sessions afterward so the new config loads.</p>
+
+        <div class="codefile">
+          <div class="codefile-head">
+            <span class="file"><span class="marker">»</span>~/.claude/settings.json</span>
+            <button class="copy-btn" data-copy="settings">Copy</button>
+          </div>
+<pre id="settings"><span class="p">{</span>
+  <span class="k">"hooks"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="k">"UserPromptSubmit"</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span>
+        <span class="k">"hooks"</span><span class="p">:</span> <span class="p">[</span>
+          <span class="p">{</span>
+            <span class="k">"type"</span><span class="p">:</span> <span class="s">"command"</span><span class="p">,</span>
+            <span class="k">"command"</span><span class="p">:</span> <span class="s">"/Users/you/projects/claude-work-guard/claude-work-guard.sh prompt"</span>
+          <span class="p">}</span>
+        <span class="p">]</span>
+      <span class="p">}</span>
+    <span class="p">]</span><span class="p">,</span>
+    <span class="k">"PostToolUse"</span><span class="p">:</span> <span class="p">[</span>
+      <span class="p">{</span>
+        <span class="k">"matcher"</span><span class="p">:</span> <span class="s">"Edit|Write|MultiEdit|NotebookEdit"</span><span class="p">,</span>
+        <span class="k">"hooks"</span><span class="p">:</span> <span class="p">[</span>
+          <span class="p">{</span>
+            <span class="k">"type"</span><span class="p">:</span> <span class="s">"command"</span><span class="p">,</span>
+            <span class="k">"command"</span><span class="p">:</span> <span class="s">"/Users/you/projects/claude-work-guard/claude-work-guard.sh edit"</span>
+          <span class="p">}</span>
+        <span class="p">]</span>
+      <span class="p">}</span>
+    <span class="p">]</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== CONFIGURATION ===== -->
+    <section class="man reveal r4">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>CONFIGURATION</div>
+      <div class="sec-body">
+        <dl class="config">
+          <div class="config-row">
+            <dt>CLAUDE_WORK_GUARD_THRESHOLD</dt>
+            <dd>Env var, seconds. Default <code class="amber">900</code> (15 min). Example: <code>export CLAUDE_WORK_GUARD_THRESHOLD=600</code> to nag after ten minutes instead.</dd>
+          </div>
+          <div class="config-row">
+            <dt>.no-work-guard</dt>
+            <dd>Per-repo opt-out. Create an empty file at the repo root and the hook ignores that directory for good.</dd>
+          </div>
+          <div class="config-row">
+            <dt>non-git directories</dt>
+            <dd>Always skipped automatically. Scratch dirs and one-off script folders won't trip it.</dd>
+          </div>
+          <div class="config-row">
+            <dt>default-branch list</dt>
+            <dd>Edit the <code>case &quot;$branch&quot; in main|master|develop|trunk|dev) ...</code> line in the script.</dd>
+          </div>
+          <div class="config-row">
+            <dt>state location</dt>
+            <dd><code>~/.claude/work-guard/&lt;session_id&gt;.json</code>. Safe to delete at any time &mdash; recreated on the next edit.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- ===== FILES ===== -->
+    <section class="man reveal r4">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>FILES</div>
+      <div class="sec-body">
+        <dl class="config">
+          <div class="config-row">
+            <dt>claude-work-guard.sh</dt>
+            <dd>The hook script. Invoked as either <code>prompt</code> or <code>edit</code>.</dd>
+          </div>
+          <div class="config-row">
+            <dt>~/.claude/settings.json</dt>
+            <dd>Where the two hook points are wired up.</dd>
+          </div>
+          <div class="config-row">
+            <dt>~/.claude/work-guard/*.json</dt>
+            <dd>Per-session state. One file per <code>session_id</code>.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- ===== SEE ALSO ===== -->
+    <section class="man reveal r4">
+      <div class="sec-head"><svg class="sec-head-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>SEE ALSO</div>
+      <div class="sec-body">
+        <p><a href="https://github.com/Roach/claude-work-guard">github.com/Roach/claude-work-guard</a> &mdash; source, issues, history.</p>
+        <p><a href="https://github.com/Roach/claude-work-guard/blob/main/README.md">README.md</a> &mdash; long-form notes, manual test steps, design rationale.</p>
+        <p><a href="https://docs.claude.com/en/docs/claude-code/hooks">claude code hooks documentation</a> &mdash; the underlying hook system.</p>
+      </div>
+    </section>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="pagefoot">
+      <span>claude-work-guard(1)</span>
+      <span class="end">─── END ───</span>
+      <span><a href="https://github.com/Roach/claude-work-guard">view source ↗</a></span>
+    </footer>
+  </div>
+
+  <script>
+    // Animated session counter — ticks 00:00 → 15:00 alongside the progress bar.
+    (function () {
+      const counter = document.querySelector('.progress-counter');
+      if (!counter) return;
+      const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduce) { counter.textContent = '15:00'; return; }
+      const startDelay = 700;   // matches CSS bar fill animation-delay
+      const duration   = 4000;  // matches CSS bar fill duration
+      const totalSec   = 15 * 60;
+      setTimeout(() => {
+        const t0 = performance.now();
+        function tick() {
+          const t = Math.min(1, (performance.now() - t0) / duration);
+          const sec = Math.floor(t * totalSec);
+          const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+          const ss = String(sec % 60).padStart(2, '0');
+          counter.textContent = `${mm}:${ss}`;
+          if (t < 1) requestAnimationFrame(tick);
+        }
+        tick();
+      }, startDelay);
+    })();
+
+    document.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.copy;
+        const target = id ? document.getElementById(id) : null;
+        if (!target) return;
+        const text = target.textContent;
+        const done = () => {
+          const orig = btn.textContent;
+          btn.textContent = '✓ Copied';
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.textContent = orig;
+            btn.classList.remove('copied');
+          }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(() => {
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          });
+        } else {
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
