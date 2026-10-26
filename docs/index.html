@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>claude-work-guard(1) · man page</title>
-  <meta name="description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask for a Jira ticket or feature branch.">
+  <meta name="description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask for a Linear ticket or feature branch.">
   <meta name="author" content="Roach">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0b0c0e">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="claude-work-guard">
   <meta property="og:title" content="claude-work-guard(1) — single-shot session nag">
-  <meta property="og:description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask about a Jira ticket or feature branch.">
+  <meta property="og:description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask about a Linear ticket or feature branch.">
   <meta property="og:url" content="https://roach.github.io/claude-work-guard/">
   <meta property="og:locale" content="en_US">
   <meta property="og:image" content="https://github.com/user-attachments/assets/44a08900-bb1b-47c8-9277-b6892c809a93">
@@ -22,7 +22,7 @@
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="claude-work-guard(1)">
-  <meta name="twitter:description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask about a Jira ticket or feature branch.">
+  <meta name="twitter:description" content="A Claude Code hook that interrupts long, untracked coding sessions to ask about a Linear ticket or feature branch.">
   <meta name="twitter:image" content="https://github.com/user-attachments/assets/44a08900-bb1b-47c8-9277-b6892c809a93">
 
   <!-- Canonical -->
@@ -840,7 +840,7 @@
       </h1>
 
       <p class="hero-tagline">
-        Interrupts long, untracked Claude Code sessions to ask whether to file a Jira ticket or cut a feature branch.
+        Interrupts long, untracked Claude Code sessions to ask whether to file a Linear ticket or cut a feature branch.
         <br/><br/><em>One nag per session, then quiet.</em>
       </p>
 
@@ -884,10 +884,10 @@
             <div class="demo-claude-pause">
               <div class="claude-divider"></div>
               <div class="claude-msg">
-                Hold on — we're <strong>15&nbsp;minutes</strong> into this session on <code>main</code> with <strong>4 uncommitted files</strong> and no Jira ticket referenced yet. Want me to:
+                Hold on — we're <strong>15&nbsp;minutes</strong> into this session on <code>main</code> with <strong>4 uncommitted files</strong> and no Linear ticket referenced yet. Want me to:
               </div>
               <ul class="claude-options">
-                <li>file a Jira ticket for this work</li>
+                <li>file a Linear ticket for this work</li>
                 <li>cut a feature branch before further edits</li>
               </ul>
               <div class="claude-msg">Or should we push through and sort it after?</div>
@@ -932,16 +932,16 @@
           </div>
 <pre class="nag"><span class="warn">⚠</span>  Work-guard check (<span class="num">20</span> min into this session):
   <span class="dot">•</span>  <span class="num">4</span> uncommitted files
-  <span class="dot">•</span>  no Jira ticket referenced yet
+  <span class="dot">•</span>  no Linear ticket referenced yet
   <span class="dot">•</span>  on default branch <span class="branch">`main`</span>
 
 Pause and ask the user whether to:
-  <span class="arrow">→</span>  create or reference a Jira ticket
+  <span class="arrow">→</span>  create or reference a Linear ticket
   <span class="arrow">→</span>  cut a feature branch before further edits
 If they decline, continue and don't ask again.</pre>
         </div>
 
-        <p class="dim">Each bullet drops out individually when its condition isn't met. If both Jira and branch conditions are already satisfied, the hook exits silently &mdash; no nag at all.</p>
+        <p class="dim">Each bullet drops out individually when its condition isn't met. If both Linear and branch conditions are already satisfied, the hook exits silently &mdash; no nag at all.</p>
       </div>
     </section>
 
@@ -960,7 +960,7 @@ If they decline, continue and don't ask again.</pre>
               </svg>
               UserPromptSubmit
             </div>
-            <div class="desc">Every user message. Scans for a Jira-style key (<code>PROJ-123</code>) and sets <code>jira_seen</code>.</div>
+            <div class="desc">Every user message. Scans for a Linear-style key (<code>PROJ-123</code>) and sets <code>linear_seen</code>.</div>
           </div>
           <div class="flow-node">
             <div class="tag">[ trigger · edit mode ]</div>
@@ -975,7 +975,7 @@ If they decline, continue and don't ask again.</pre>
           </div>
         </div>
 
-        <p>On the first edit past the threshold, the script gathers facts &mdash; branch, dirty-file count, Jira-seen flag &mdash; and decides whether to interrupt. <a href="#the-interruption">See above</a> for what the interrupt itself looks like.</p>
+        <p>On the first edit past the threshold, the script gathers facts &mdash; branch, dirty-file count, Linear-seen flag &mdash; and decides whether to interrupt. <a href="#the-interruption">See above</a> for what the interrupt itself looks like.</p>
       </div>
     </section>
 
@@ -988,7 +988,7 @@ If they decline, continue and don't ask again.</pre>
         <ol class="triggers">
           <li><strong>Elapsed time</strong> since the first edit in this session ≥ threshold (default 15 minutes).</li>
           <li><strong>No prior warning</strong> issued in this session.</li>
-          <li><strong>Either</strong> no Jira-style key has been seen in any user prompt this session, <strong>or</strong> the repo's current branch is one of <code>main</code>, <code>master</code>, <code>develop</code>, <code>trunk</code>, <code>dev</code>.</li>
+          <li><strong>Either</strong> no Linear-style key has been seen in any user prompt this session, <strong>or</strong> the repo's current branch is one of <code>main</code>, <code>master</code>, <code>develop</code>, <code>trunk</code>, <code>dev</code>.</li>
         </ol>
       </div>
     </section>
